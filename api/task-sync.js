@@ -42,13 +42,11 @@ export default async function handler(req, res) {
       "https://geotech-s.bitrix24.ru/rest/66/i3rbogjfcwq69wum/task.item.update.json";
 
     // =============================
-    // 1️⃣ Получаем задачу
+    // Получаем задачу
     // =============================
     const taskResponse = await fetch(TASK_GET_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ taskId })
     });
 
@@ -74,17 +72,14 @@ export default async function handler(req, res) {
     }
 
     const leadId = crmBinding.replace("L_", "");
-
     log("info", "Lead detected", { leadId });
 
     // =============================
-    // 2️⃣ Получаем лид
+    // Получаем лид
     // =============================
     const leadResponse = await fetch(LEAD_GET_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ id: leadId })
     });
 
@@ -96,42 +91,35 @@ export default async function handler(req, res) {
     }
 
     const newResponsibleId = leadData.result.ASSIGNED_BY_ID;
-
     log("info", "Responsible from lead", { newResponsibleId });
 
     // Если уже совпадает — ничего не делаем
     if (String(task.RESPONSIBLE_ID) === String(newResponsibleId)) {
       log("info", "Responsible already correct");
-      return res.status(200).json({
-        success: true,
-        message: "Already synced"
-      });
+      return res.status(200).json({ success: true, message: "Already synced" });
     }
 
     // =============================
-    // 3️⃣ Обновляем задачу
+    // Обновляем задачу
     // =============================
     const updateResponse = await fetch(TASK_UPDATE_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         taskId,
-        "fields[RESPONSIBLE_ID]": newResponsibleId
+        "fields[RESPONSIBLE_ID]": String(newResponsibleId)
       })
     });
 
     const updateData = await updateResponse.json();
 
-    if (!updateData.result) {
+    // Новая проверка: если есть error — считаем неудачей
+    if (updateData.error) {
       log("error", "Task update failed", updateData);
-      return res.status(500).json({
-        error: "Update failed",
-        details: updateData
-      });
+      return res.status(500).json({ error: "Update failed", details: updateData });
     }
 
+    // Иначе считаем успешным, даже если result=null
     log("info", "Task updated successfully", {
       taskId,
       newResponsibleId,
@@ -151,7 +139,6 @@ export default async function handler(req, res) {
       stack: error.stack,
       timestamp: new Date().toISOString()
     }));
-
     return res.status(500).json({ error: "Internal server error" });
   }
 }
