@@ -17,19 +17,17 @@ export default async function handler(req, res) {
 
     log("info", "Raw body received", req.body);
 
-    // ⬇️ Bizproc отправляет form-data, auth и document_id — строки
-    const auth = JSON.parse(req.body.auth || "{}");
-    const documentId = JSON.parse(req.body.document_id || "[]");
+    // ✅ Правильный разбор form-data от Bitrix
+    const taskId = req.body["document_id[2]"];
+    const restEndpoint = req.body["auth[client_endpoint]"];
+    const memberId = req.body["auth[member_id]"];
 
-    if (!auth.client_endpoint || !documentId[2]) {
-      log("error", "Invalid payload structure", { auth, documentId });
+    if (!taskId || !restEndpoint) {
+      log("error", "Invalid payload structure", req.body);
       return res.status(400).json({ error: "Invalid payload" });
     }
 
-    const taskId = documentId[2];
-    const restEndpoint = auth.client_endpoint;
-
-    log("info", "Processing task", { taskId });
+    log("info", "Processing task", { taskId, memberId });
 
     // =============================
     // 1️⃣ Получаем задачу
@@ -96,10 +94,7 @@ export default async function handler(req, res) {
     // Если уже совпадает — не обновляем
     if (String(task.RESPONSIBLE_ID) === String(newResponsibleId)) {
       log("info", "Responsible already correct");
-      return res.status(200).json({
-        success: true,
-        message: "Already synced"
-      });
+      return res.status(200).json({ success: true, message: "Already synced" });
     }
 
     // =============================
