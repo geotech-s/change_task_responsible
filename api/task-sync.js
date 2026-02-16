@@ -11,27 +11,55 @@ export default async function handler(req, res) {
   };
 
   try {
+    log("info", "=== NEW REQUEST ===");
+
+    // Логируем метод и headers
+    log("info", "Request meta", {
+      method: req.method,
+      headers: req.headers
+    });
+
     if (req.method !== "POST") {
+      log("warn", "Invalid method");
       return res.status(405).json({ error: "Method not allowed" });
     }
 
+    // Логируем raw body
     log("info", "Raw body received", req.body);
 
-    // =============================
-    // Получаем ID задачи из webhook БП
-    // =============================
-    const taskId = req.body["document_id[2]"];
+    // ===== Парсинг body
+    let body = req.body;
+
+    if (typeof body === "string") {
+      try {
+        body = Object.fromEntries(new URLSearchParams(body));
+        log("info", "Body parsed from string", body);
+      } catch (e) {
+        log("error", "Failed to parse body string", e.message);
+      }
+    }
+
+    // ===== Извлекаем document_id
+    const doc0 = body["document_id[0]"];
+    const doc1 = body["document_id[1]"];
+    const doc2 = body["document_id[2]"];
+
+    log("info", "Parsed document_id fields", {
+      doc0,
+      doc1,
+      doc2
+    });
+
+    const taskId = doc2;
 
     if (!taskId) {
-      log("error", "Task ID not found in payload", req.body);
+      log("error", "BITRIX_BLOCKED_OR_INVALID_PAYLOAD", body);
       return res.status(400).json({ error: "Task ID missing" });
     }
 
     log("info", "Processing task", { taskId });
 
-    // =============================
-    // ВЕБХУКИ
-    // =============================
+    // ===== Вебхуки Bitrix
     const TASK_GET_URL =
       "https://geotech-s.bitrix24.ru/rest/66/ugbjhxzk2388u5yr/task.item.getdata.json";
 
@@ -44,6 +72,8 @@ export default async function handler(req, res) {
     // =============================
     // Получаем задачу
     // =============================
+    log("info", "Requesting task data");
+
     const taskResponse = await fetch(TASK_GET_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -51,10 +81,11 @@ export default async function handler(req, res) {
     });
 
     const taskData = await taskResponse.json();
+    log("info", "Task response", taskData);
 
     if (!taskData.result) {
-      log("error", "Task not found", taskData);
-      return res.status(404).json({ error: "Task not found", details: taskData });
+      log("error", "Task not found or invalid response", taskData);
+      return res.status(404).json({ error: "Task not found" });
     }
 
     const task = taskData.result;
@@ -67,7 +98,7 @@ export default async function handler(req, res) {
     const crmBinding = task.UF_CRM_TASK[0];
 
     if (!crmBinding.startsWith("L_")) {
-      log("info", "Binding is not a lead", { crmBinding });
+      log("info", "CRM binding is not a lead", { crmBinding });
       return res.status(200).json({ success: true, message: "Not a lead binding" });
     }
 
@@ -77,6 +108,8 @@ export default async function handler(req, res) {
     // =============================
     // Получаем лид
     // =============================
+    log("info", "Requesting lead data");
+
     const leadResponse = await fetch(LEAD_GET_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -84,24 +117,32 @@ export default async function handler(req, res) {
     });
 
     const leadData = await leadResponse.json();
+    log("info", "Lead response", leadData);
 
     if (!leadData.result) {
-      log("error", "Lead not found", leadData);
-      return res.status(404).json({ error: "Lead not found", details: leadData });
+      log("error", "Lead not found or invalid response", leadData);
+      return res.status(404).json({ error: "Lead not found" });
     }
 
     const newResponsibleId = leadData.result.ASSIGNED_BY_ID;
     log("info", "Responsible from lead", { newResponsibleId });
 
-    // Если уже совпадает — ничего не делаем
+    if (!newResponsibleId) {
+      log("error", "Lead has no ASSIGNED_BY_ID");
+      return res.status(400).json({ error: "Lead has no responsible" });
+    }
+
+    // Если уже совпадает
     if (String(task.RESPONSIBLE_ID) === String(newResponsibleId)) {
-      log("info", "Responsible already correct");
+      log("info", "Responsible already synced");
       return res.status(200).json({ success: true, message: "Already synced" });
     }
 
     // =============================
     // Обновляем задачу
     // =============================
+    log("info", "Updating task responsible");
+
     const updateResponse = await fetch(TASK_UPDATE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -112,14 +153,13 @@ export default async function handler(req, res) {
     });
 
     const updateData = await updateResponse.json();
+    log("info", "Update response", updateData);
 
-    // Новая проверка: если есть error — считаем неудачей
     if (updateData.error) {
       log("error", "Task update failed", updateData);
       return res.status(500).json({ error: "Update failed", details: updateData });
     }
 
-    // Иначе считаем успешным, даже если result=null
     log("info", "Task updated successfully", {
       taskId,
       newResponsibleId,
@@ -133,12 +173,11 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error(JSON.stringify({
-      level: "fatal",
+    log("fatal", "Unhandled exception", {
       message: error.message,
-      stack: error.stack,
-      timestamp: new Date().toISOString()
-    }));
+      stack: error.stack
+    });
+
     return res.status(500).json({ error: "Internal server error" });
   }
 }
