@@ -61,13 +61,13 @@ export default async function handler(req, res) {
 
     // ===== Вебхуки Bitrix
     const TASK_GET_URL =
-      "https://geotech-s.bitrix24.ru/rest/66/ugbjhxzk2388u5yr/task.item.getdata.json";
+      "https://geotech-s.bitrix24.ru/rest/70/66t0oshgppeew1kj/task.item.getdata.json";
 
     const LEAD_GET_URL =
-      "https://geotech-s.bitrix24.ru/rest/66/kbs41wsjh3bjgiqs/crm.lead.get.json";
+      "https://geotech-s.bitrix24.ru/rest/70/333ed15kcwzis04q/crm.lead.get.json";
 
     const TASK_UPDATE_URL =
-      "https://geotech-s.bitrix24.ru/rest/66/i3rbogjfcwq69wum/task.item.update.json";
+      "https://geotech-s.bitrix24.ru/rest/70/1b0uh8asry7b449d/task.item.update.json";
 
     // =============================
     // Получаем задачу
